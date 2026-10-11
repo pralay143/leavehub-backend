@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import environ
 
@@ -48,6 +49,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "rest_framework",
     "corsheaders",
+    "rest_framework_simplejwt.token_blacklist",
     "accounts",
 ]
 
@@ -145,3 +147,35 @@ CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
     default=["http://localhost:5173"],
 )
+
+
+# Django REST Framework
+# https://www.django-rest-framework.org/api-guide/settings/
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": "10/minute",
+    },
+}
+
+
+# Simple JWT
+# https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "CHECK_REVOKE_TOKEN": True,
+    "TOKEN_OBTAIN_SERIALIZER": "accounts.serializers.LoginSerializer",
+}
