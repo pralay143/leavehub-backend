@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LeaveBalance, LeaveType
+from .models import LeaveBalance, LeaveRequest, LeaveType
 
 
 @admin.register(LeaveType)
@@ -32,3 +32,24 @@ class LeaveBalanceAdmin(admin.ModelAdmin):
         if db_field.name == "leave_type":
             kwargs["queryset"] = LeaveType.objects.filter(requires_balance=True)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(LeaveRequest)
+class LeaveRequestAdmin(admin.ModelAdmin):
+    """Read-only: requests are created and changed through leaves.services so
+    that balance, overlap and approver rules always apply."""
+
+    list_display = ("employee", "leave_type", "start_date", "end_date", "days", "status", "reviewed_by", "created_at")
+    list_filter = ("status", "leave_type", "start_date")
+    search_fields = ("employee__email", "employee__first_name", "employee__last_name")
+    list_select_related = ("employee", "leave_type", "reviewed_by")
+    date_hierarchy = "start_date"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

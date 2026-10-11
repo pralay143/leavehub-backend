@@ -122,3 +122,73 @@ class LeaveBalance(models.Model):
     def remaining(self):
         """Allocated minus used. Pending requests are not subtracted here."""
         return self.allocated - self.used
+
+
+class LeaveRequest(models.Model):
+    """A request for leave. Create and change it only through leaves.services."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    employee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="leave_requests",
+    )
+    leave_type = models.ForeignKey(
+        LeaveType,
+        on_delete=models.PROTECT,
+        related_name="requests",
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    half_day = models.BooleanField(default=False)
+    days = models.DecimalField(
+        max_digits=5,
+        decimal_places=1,
+        help_text="Working days requested, calculated by the server.",
+    )
+    reason = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_leave_requests",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["employee", "status"], name="leaves_req_employee_status"),
+            models.Index(fields=["status"], name="leaves_req_status"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(end_date__gte=F("start_date")),
+                name="leaves_leaverequest_end_not_before_start",
+            ),
+            models.CheckConstraint(
+                condition=Q(days__gt=0),
+                name="leaves_leaverequest_days_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(half_day=False) | Q(start_date=F("end_date"), days=Decimal("0.5")),
+                name="leaves_leaverequest_half_day_single_date",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.employee} - {self.leave_type} {self.start_date}..{self.end_date} ({self.status})"
