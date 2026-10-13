@@ -20,12 +20,13 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
 from accounts.views import DepartmentViewSet, UserViewSet
-from leaves.views import LeaveTypeViewSet
+from leaves.views import LeaveBalanceViewSet, LeaveTypeViewSet
 
 router = DefaultRouter()
 router.register("departments", DepartmentViewSet, basename="department")
 router.register("users", UserViewSet, basename="user")
 router.register("leave-types", LeaveTypeViewSet, basename="leave-type")
+router.register("leave-balances", LeaveBalanceViewSet, basename="leave-balance")
 
 urlpatterns = [
     path('admin/', admin.site.urls),

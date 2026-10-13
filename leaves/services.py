@@ -5,6 +5,7 @@ order (employee user row, then leave request, then leave balance) so that
 concurrent operations cannot double-spend a balance or deadlock.
 """
 
+from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
 
@@ -266,6 +267,62 @@ def cancel_leave_request(*, leave_request, user):
         leave_request.status = LeaveRequest.Status.CANCELLED
         leave_request.save(update_fields=["status", "updated_at"])
         return leave_request
+
+
+# --- Yearly allocation ------------------------------------------------------
+
+
+@dataclass
+class AllocationResult:
+    year: int
+    balances: list
+    active_users: int
+    leave_types: int
+    already_existed: int
+    dry_run: bool
+
+    @property
+    def created(self):
+        return 0 if self.dry_run else len(self.balances)
+
+
+def allocate_leave_balances(year, *, dry_run=False):
+    """Create missing balances for `year`: one per active user and active leave
+    type that uses a balance, allocated from the type's default_annual_days.
+    Existing balances are never changed, so this is safe to run repeatedly."""
+    if not 2000 <= year <= 2100:
+        raise LeaveRequestError("The year must be between 2000 and 2100.")
+
+    users = list(get_user_model().objects.filter(is_active=True).order_by("email"))
+    leave_types = list(LeaveType.objects.filter(is_active=True, requires_balance=True))
+    existing = set(
+        LeaveBalance.objects.filter(year=year).values_list("employee_id", "leave_type_id")
+    )
+    to_create = [
+        LeaveBalance(
+            employee=user,
+            leave_type=leave_type,
+            year=year,
+            allocated=leave_type.default_annual_days,
+        )
+        for user in users
+        for leave_type in leave_types
+        if (user.pk, leave_type.pk) not in existing
+    ]
+
+    if not dry_run:
+        with transaction.atomic():
+            # ignore_conflicts: a balance created concurrently is left as-is.
+            LeaveBalance.objects.bulk_create(to_create, ignore_conflicts=True)
+
+    return AllocationResult(
+        year=year,
+        balances=to_create,
+        active_users=len(users),
+        leave_types=len(leave_types),
+        already_existed=len(existing),
+        dry_run=dry_run,
+    )
 
 
 # --- Internal checks --------------------------------------------------------
