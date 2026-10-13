@@ -27,6 +27,13 @@ class LoginSerializer(TokenObtainPairSerializer):
         return token
 
 
+class TokenPairSerializer(serializers.Serializer):
+    """Response of the login endpoint (documentation only)."""
+
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
+
+
 class UserSummarySerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
 
@@ -46,8 +53,8 @@ class DepartmentSerializer(serializers.ModelSerializer):
 
 class MeSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
-    manager = UserSummarySerializer(read_only=True)
-    department = DepartmentSerializer(read_only=True)
+    manager = UserSummarySerializer(read_only=True, allow_null=True)
+    department = DepartmentSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = User

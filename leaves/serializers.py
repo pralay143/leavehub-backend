@@ -91,7 +91,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
 
     employee = UserSummarySerializer(read_only=True)
     leave_type = LeaveTypeSummarySerializer(read_only=True)
-    reviewed_by = UserSummarySerializer(read_only=True)
+    reviewed_by = UserSummarySerializer(read_only=True, allow_null=True)
     can_approve = serializers.SerializerMethodField()
     can_reject = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()

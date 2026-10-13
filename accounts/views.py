@@ -1,4 +1,5 @@
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -7,9 +8,16 @@ from config.viewsets import CreateListRetrieveUpdateViewSet, bool_query_param, i
 
 from .models import Department, User
 from .permissions import IsHR, IsHROrReadOnly, is_hr
-from .serializers import DepartmentSerializer, MeSerializer, UserSerializer
+from .serializers import (
+    DepartmentSerializer,
+    LoginSerializer,
+    MeSerializer,
+    TokenPairSerializer,
+    UserSerializer,
+)
 
 
+@extend_schema_view(post=extend_schema(request=LoginSerializer, responses=TokenPairSerializer))
 class LoginView(TokenObtainPairView):
     """POST email and password; returns access and refresh tokens."""
 
