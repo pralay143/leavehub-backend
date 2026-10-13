@@ -1,5 +1,6 @@
 from django.db.models import Q
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -48,6 +49,17 @@ class DepartmentViewSet(CreateListRetrieveUpdateViewSet):
         return departments
 
 
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter("role", OpenApiTypes.STR, enum=[r for r, _ in User.Role.choices]),
+            OpenApiParameter("department", OpenApiTypes.INT),
+            OpenApiParameter("manager", OpenApiTypes.INT),
+            OpenApiParameter("is_active", OpenApiTypes.BOOL),
+            OpenApiParameter("search", OpenApiTypes.STR, description="Matches email, username, first or last name."),
+        ]
+    )
+)
 class UserViewSet(CreateListRetrieveUpdateViewSet):
     """User management for HR.
 
