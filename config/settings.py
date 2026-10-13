@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 from datetime import timedelta
 from pathlib import Path
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -189,8 +190,12 @@ SPECTACULAR_SETTINGS = {
 # Simple JWT
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
 
+JWT_ACCESS_MINUTES = env.int("JWT_ACCESS_MINUTES", default=15)
+if not 1 <= JWT_ACCESS_MINUTES <= 1440:
+    raise ImproperlyConfigured("JWT_ACCESS_MINUTES must be between 1 and 1440.")
+
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=JWT_ACCESS_MINUTES),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
