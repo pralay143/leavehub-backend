@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from .models import LeaveBalance, LeaveRequest, LeaveType
@@ -89,6 +89,40 @@ def eligible_approvers(employee):
     if hr_users.exists():
         return hr_users
     return others.filter(is_superuser=True)
+
+
+def review_queue_filter(reviewer):
+    """A LeaveRequest filter matching requests routed to `reviewer`.
+
+    The queryset form of `eligible_approvers`: a request matches when
+    `reviewer` is in `eligible_approvers(request.employee)`. Combine it with
+    a status filter to build a review inbox.
+    """
+    User = get_user_model()
+    if not reviewer.is_active:
+        return Q(pk__in=[])
+
+    # Mirrors eligible_approvers: requests go to an active manager unless the
+    # employee is HR; everything else goes to HR, then to superusers.
+    to_manager = ~Q(employee__role=User.Role.HR) & Q(employee__manager__is_active=True)
+    to_hr = (
+        Q(employee__role=User.Role.HR)
+        | Q(employee__manager__isnull=True)
+        | Q(employee__manager__is_active=False)
+    )
+
+    routed = to_manager & Q(employee__manager=reviewer)
+    if reviewer.role == User.Role.HR:
+        routed |= to_hr
+    elif reviewer.is_superuser:
+        # Superusers are the fallback when no active HR user other than the
+        # employee exists.
+        active_hr = list(User.objects.filter(is_active=True, role=User.Role.HR).values_list("pk", flat=True))
+        if not active_hr:
+            routed |= to_hr
+        elif len(active_hr) == 1:
+            routed |= to_hr & Q(employee_id=active_hr[0])
+    return routed & ~Q(employee=reviewer)
 
 
 def can_review(reviewer, leave_request):

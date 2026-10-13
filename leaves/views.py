@@ -1,12 +1,13 @@
 from decimal import Decimal
 
-from django.db.models import DecimalField, OuterRef, Subquery, Sum, Value
+from django.db.models import DecimalField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -18,9 +19,19 @@ from .serializers import (
     AllocateBalancesSerializer,
     AllocationResultSerializer,
     LeaveBalanceSerializer,
+    LeaveRequestCreateSerializer,
+    LeaveRequestSerializer,
     LeaveTypeSerializer,
+    ReviewSerializer,
 )
-from .services import allocate_leave_balances
+from .services import (
+    allocate_leave_balances,
+    approve_leave_request,
+    cancel_leave_request,
+    create_leave_request,
+    reject_leave_request,
+    review_queue_filter,
+)
 
 
 class LeaveTypeViewSet(CreateListRetrieveUpdateViewSet):
@@ -127,3 +138,119 @@ class LeaveBalanceViewSet(
                 }
             ).data
         )
+
+
+SCOPES = ("mine", "team", "review", "all")
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "scope",
+                OpenApiTypes.STR,
+                enum=SCOPES,
+                description=(
+                    "mine (default): your requests. team: your direct reports. "
+                    "review: pending requests routed to you. all: HR only."
+                ),
+            ),
+            OpenApiParameter("status", OpenApiTypes.STR, enum=[s for s, _ in LeaveRequest.Status.choices]),
+            OpenApiParameter("year", OpenApiTypes.INT, description="Year of the start date."),
+            OpenApiParameter("leave_type", OpenApiTypes.INT),
+        ]
+    ),
+    create=extend_schema(request=LeaveRequestCreateSerializer, responses={201: LeaveRequestSerializer}),
+)
+class LeaveRequestViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Leave requests.
+
+    You can see your own requests, your direct reports' requests and, as HR,
+    everyone's. Requests are never edited or deleted: cancel and resubmit.
+    """
+
+    serializer_class = LeaveRequestSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):  # schema generation
+            return LeaveRequest.objects.none()
+        user = self.request.user
+        requests = LeaveRequest.objects.select_related(
+            "employee", "employee__manager", "leave_type", "reviewed_by"
+        ).order_by("-created_at")
+        if not is_hr(user):
+            requests = requests.filter(Q(employee=user) | Q(employee__manager=user))
+
+        if self.action == "list":
+            requests = self._apply_list_filters(requests, user)
+        return requests
+
+    def _apply_list_filters(self, requests, user):
+        params = self.request.query_params
+        scope = params.get("scope", "mine")
+        if scope not in SCOPES:
+            raise ValidationError({"scope": f"Must be one of: {', '.join(SCOPES)}."})
+        if scope == "mine":
+            requests = requests.filter(employee=user)
+        elif scope == "team":
+            requests = requests.filter(employee__manager=user)
+        elif scope == "review":
+            requests = requests.filter(review_queue_filter(user), status=LeaveRequest.Status.PENDING)
+        elif not is_hr(user):
+            raise PermissionDenied("Only HR can list all leave requests.")
+
+        status_value = params.get("status")
+        if status_value:
+            status_value = status_value.upper()
+            if status_value not in LeaveRequest.Status.values:
+                raise ValidationError({"status": f"Must be one of: {', '.join(LeaveRequest.Status.values)}."})
+            requests = requests.filter(status=status_value)
+        year = int_query_param(self.request, "year")
+        if year is not None:
+            requests = requests.filter(start_date__year=year)
+        leave_type = int_query_param(self.request, "leave_type")
+        if leave_type is not None:
+            requests = requests.filter(leave_type_id=leave_type)
+        return requests
+
+    def _respond(self, leave_request, status_code=status.HTTP_200_OK):
+        leave_request = self.get_queryset().get(pk=leave_request.pk)
+        return Response(self.get_serializer(leave_request).data, status=status_code)
+
+    def create(self, request, *args, **kwargs):
+        params = LeaveRequestCreateSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        leave_request = create_leave_request(employee=request.user, **params.validated_data)
+        return self._respond(leave_request, status.HTTP_201_CREATED)
+
+    @extend_schema(request=ReviewSerializer, responses=LeaveRequestSerializer)
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        params = ReviewSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        leave_request = approve_leave_request(
+            leave_request=self.get_object(), reviewer=request.user, comment=params.validated_data["comment"]
+        )
+        return self._respond(leave_request)
+
+    @extend_schema(request=ReviewSerializer, responses=LeaveRequestSerializer)
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        params = ReviewSerializer(data=request.data)
+        params.is_valid(raise_exception=True)
+        leave_request = reject_leave_request(
+            leave_request=self.get_object(), reviewer=request.user, comment=params.validated_data["comment"]
+        )
+        return self._respond(leave_request)
+
+    @extend_schema(request=None, responses=LeaveRequestSerializer)
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        leave_request = cancel_leave_request(leave_request=self.get_object(), user=request.user)
+        return self._respond(leave_request)

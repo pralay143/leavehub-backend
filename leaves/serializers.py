@@ -1,11 +1,12 @@
 from django.db import transaction
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from accounts.serializers import UserSummarySerializer
 
-from .models import LeaveBalance, LeaveType
-from .services import pending_days
+from .models import LeaveBalance, LeaveRequest, LeaveType
+from .services import can_review, pending_days
 
 DAYS_FIELD = serializers.DecimalField(max_digits=6, decimal_places=1)
 
@@ -83,3 +84,84 @@ class AllocationResultSerializer(serializers.Serializer):
     already_existed = serializers.IntegerField()
     active_users = serializers.IntegerField()
     leave_types = serializers.IntegerField()
+
+
+class LeaveRequestSerializer(serializers.ModelSerializer):
+    """A leave request, with flags telling the current user which actions apply."""
+
+    employee = UserSummarySerializer(read_only=True)
+    leave_type = LeaveTypeSummarySerializer(read_only=True)
+    reviewed_by = UserSummarySerializer(read_only=True)
+    can_approve = serializers.SerializerMethodField()
+    can_reject = serializers.SerializerMethodField()
+    can_cancel = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LeaveRequest
+        fields = [
+            "id",
+            "employee",
+            "leave_type",
+            "start_date",
+            "end_date",
+            "half_day",
+            "days",
+            "reason",
+            "status",
+            "reviewed_by",
+            "reviewed_at",
+            "review_comment",
+            "created_at",
+            "updated_at",
+            "can_approve",
+            "can_reject",
+            "can_cancel",
+        ]
+        read_only_fields = fields
+
+    def _user(self):
+        request = self.context.get("request")
+        return request.user if request is not None else None
+
+    def get_can_approve(self, leave_request) -> bool:
+        user = self._user()
+        return bool(
+            user
+            and leave_request.status == LeaveRequest.Status.PENDING
+            and can_review(user, leave_request)
+        )
+
+    def get_can_reject(self, leave_request) -> bool:
+        return self.get_can_approve(leave_request)
+
+    def get_can_cancel(self, leave_request) -> bool:
+        user = self._user()
+        if user is None or user.pk != leave_request.employee_id:
+            return False
+        if leave_request.status == LeaveRequest.Status.PENDING:
+            return True
+        return (
+            leave_request.status == LeaveRequest.Status.APPROVED
+            and leave_request.start_date > timezone.localdate()
+        )
+
+
+class LeaveRequestCreateSerializer(serializers.Serializer):
+    """Input for a new request. The employee is the logged-in user and the
+    number of days is calculated by the server."""
+
+    leave_type = serializers.PrimaryKeyRelatedField(queryset=LeaveType.objects.all())
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    half_day = serializers.BooleanField(default=False)
+    reason = serializers.CharField(required=False, allow_blank=True, default="", max_length=2000)
+
+
+class ReviewSerializer(serializers.Serializer):
+    comment = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=2000,
+        help_text="Optional when approving; required when rejecting.",
+    )
