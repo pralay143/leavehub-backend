@@ -1,0 +1,11 @@
+{% autoescape off %}Hello {{ employee_name }},
+
+Your {{ leave_type }} request has been approved by {{ reviewer_name }}.
+
+  Dates: {{ dates }} ({{ days }})
+{% if review_comment %}  Comment: {{ review_comment }}
+{% endif %}
+View the request: {{ url }}
+
+LeaveHub
+{% endautoescape %}

@@ -14,6 +14,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
+from . import notifications
 from .models import LeaveBalance, LeaveRequest, LeaveType, PublicHoliday
 
 HALF_DAY = Decimal("0.5")
@@ -231,7 +232,7 @@ def create_leave_request(*, employee, leave_type, start_date, end_date, half_day
                 "No one is available to approve this request. Contact HR or an administrator."
             )
 
-        return LeaveRequest.objects.create(
+        leave_request = LeaveRequest.objects.create(
             employee=employee,
             leave_type=leave_type,
             start_date=start_date,
@@ -240,6 +241,8 @@ def create_leave_request(*, employee, leave_type, start_date, end_date, half_day
             days=days,
             reason=reason,
         )
+        notifications.leave_submitted(leave_request, list(eligible_approvers(employee)))
+        return leave_request
 
 
 def approve_leave_request(*, leave_request, reviewer, comment=""):
@@ -268,6 +271,7 @@ def approve_leave_request(*, leave_request, reviewer, comment=""):
             balance.save(update_fields=["used"])
 
         _record_review(leave_request, reviewer, LeaveRequest.Status.APPROVED, comment)
+        notifications.leave_reviewed(leave_request)
         return leave_request
 
 
@@ -282,6 +286,7 @@ def reject_leave_request(*, leave_request, reviewer, comment):
         _ensure_can_review(reviewer, leave_request)
 
         _record_review(leave_request, reviewer, LeaveRequest.Status.REJECTED, comment)
+        notifications.leave_reviewed(leave_request)
         return leave_request
 
 
@@ -311,8 +316,14 @@ def cancel_leave_request(*, leave_request, user):
                 f"A {leave_request.get_status_display().lower()} request cannot be cancelled."
             )
 
+        if leave_request.status == LeaveRequest.Status.APPROVED:
+            recipients = [leave_request.reviewed_by]
+        else:
+            recipients = list(eligible_approvers(leave_request.employee))
+
         leave_request.status = LeaveRequest.Status.CANCELLED
         leave_request.save(update_fields=["status", "updated_at"])
+        notifications.leave_cancelled(leave_request, recipients)
         return leave_request
 
 

@@ -33,6 +33,10 @@ The web app is in the separate
   - balance changes run in a transaction with row locks.
 - **Public holidays** maintained by HR. Adding or removing a holiday does not
   recalculate requests that were already submitted.
+- **Email notifications** after each change is saved: approvers when a request
+  is submitted or a pending one is cancelled, the employee when it is approved
+  or rejected, and the approver when approved leave is cancelled. A failed
+  delivery is logged and never blocks the leave action.
 - **Approval routing:** to the employee's manager; HR staff and employees
   without an active manager go to the other HR users, then to superusers.
   Nobody can approve their own request. Rejecting requires a comment.
@@ -74,6 +78,10 @@ Copy `.env.example` to `.env` and fill it in. `.env` is ignored by Git.
 | `DATABASE_URL` | `postgresql://leavehub_user:<password>@localhost:5432/leavehub_db` (URL-encode special characters in the password) |
 | `CORS_ALLOWED_ORIGINS` | The frontend origin, `http://localhost:5173` for Vite |
 | `JWT_ACCESS_MINUTES` | Access token lifetime, default 15 (1–1440). Raise it locally for manual API testing |
+| `EMAIL_MODE` | `console` (default) prints emails in the `runserver` terminal; `smtp` sends them |
+| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS` | SMTP settings, used only with `EMAIL_MODE=smtp` (port 587 and TLS by default). For Gmail use an app password |
+| `DEFAULT_FROM_EMAIL` | Sender address, default `LeaveHub <noreply@localhost>` |
+| `FRONTEND_URL` | Web app URL used for links in emails, default `http://localhost:5173` |
 
 ### 4. Database, admin user and balances
 
@@ -123,7 +131,8 @@ return `404`. The full reference is in Swagger UI.
 ```
 accounts/   User (email login, role, manager, department), Department, auth and user endpoints
 leaves/     LeaveType, LeaveBalance, LeaveRequest, PublicHoliday, the leave service and its endpoints
-  services.py   Leave rules, approval routing and yearly allocation
+  services.py       Leave rules, approval routing and yearly allocation
+  notifications.py  Email notifications (templates in templates/leaves/email/)
   management/commands/allocate_leave_balances.py
 config/     Settings, URLs, pagination, shared viewset helpers, error handler
 ```
@@ -132,7 +141,7 @@ config/     Settings, URLs, pagination, shared viewset helpers, error handler
 
 | Command | Purpose |
 |---|---|
-| `manage.py test leaves` | Run the leave service tests |
+| `manage.py test leaves` | Run the leave service and notification tests |
 | `manage.py allocate_leave_balances --year 2027 [--dry-run]` | Create next year's balances (safe to re-run) |
 | `manage.py changepassword <email>` | Reset a user's password |
 | `manage.py spectacular --validate --file schema.yaml` | Check the OpenAPI schema |

@@ -138,11 +138,31 @@ STATIC_URL = 'static/'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+EMAIL_MODE = env.str("EMAIL_MODE", default="console")
+if EMAIL_MODE == "console":
+    # Print emails in the runserver terminal instead of sending them.
+    MAILERS = {"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}
+elif EMAIL_MODE == "smtp":
+    MAILERS = {
+        "default": {
+            "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+            "OPTIONS": {
+                "host": env.str("EMAIL_HOST"),
+                "port": env.int("EMAIL_PORT", default=587),
+                "username": env.str("EMAIL_HOST_USER", default=""),
+                "password": env.str("EMAIL_HOST_PASSWORD", default=""),
+                "use_tls": env.bool("EMAIL_USE_TLS", default=True),
+                "timeout": 10,
+            },
+        }
+    }
+else:
+    raise ImproperlyConfigured("EMAIL_MODE must be 'console' or 'smtp'.")
+
+DEFAULT_FROM_EMAIL = env.str("DEFAULT_FROM_EMAIL", default="LeaveHub <noreply@localhost>")
+
+# Base URL of the web app, used for links in emails.
+FRONTEND_URL = env.str("FRONTEND_URL", default="http://localhost:5173").rstrip("/")
 
 
 

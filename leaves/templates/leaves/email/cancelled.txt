@@ -1,0 +1,12 @@
+{% autoescape off %}Hello,
+
+{{ employee_name }} has cancelled a {{ leave_type }} request.
+
+  Dates: {{ dates }} ({{ days }})
+{% if reviewer_name %}  It had been approved by {{ reviewer_name }}; the days have been returned to the balance.
+{% else %}  It was still pending, so no action is needed.
+{% endif %}
+View the request: {{ url }}
+
+LeaveHub
+{% endautoescape %}

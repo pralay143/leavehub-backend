@@ -1,0 +1,11 @@
+{% autoescape off %}Hello,
+
+{{ employee_name }} has requested {{ leave_type }}:
+
+  Dates: {{ dates }} ({{ days }})
+{% if reason %}  Reason: {{ reason }}
+{% endif %}
+Review the request: {{ url }}
+
+LeaveHub
+{% endautoescape %}

@@ -1,0 +1,11 @@
+{% autoescape off %}Hello {{ employee_name }},
+
+Your {{ leave_type }} request has been rejected by {{ reviewer_name }}.
+
+  Dates: {{ dates }} ({{ days }})
+  Comment: {{ review_comment }}
+
+View the request: {{ url }}
+
+LeaveHub
+{% endautoescape %}
