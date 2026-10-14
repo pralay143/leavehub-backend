@@ -24,12 +24,15 @@ The web app is in the separate
 - **Leave types** (Earned 18, Sick 12, Casual 6 and Unpaid by default) and
   **yearly balances** per employee and leave type.
 - **Leave requests** with these rules:
-  - only weekdays count; a half day is allowed for a single date;
+  - only weekdays count, and company-wide public holidays are skipped;
+    a half day is allowed for a single working date;
   - a request must stay within one calendar year;
   - requests cannot overlap the employee's pending or approved leave;
   - available days are `allocated - used - pending`, and the balance is
     checked again when a request is approved;
   - balance changes run in a transaction with row locks.
+- **Public holidays** maintained by HR. Adding or removing a holiday does not
+  recalculate requests that were already submitted.
 - **Approval routing:** to the employee's manager; HR staff and employees
   without an active manager go to the other HR users, then to superusers.
   Nobody can approve their own request. Rejecting requires a comment.
@@ -105,6 +108,7 @@ List endpoints return 20 results per page; pass `?page_size=` for up to 100.
 | `POST /api/auth/login/`, `refresh/`, `logout/` | Anyone | Get, rotate and revoke tokens |
 | `GET /api/auth/me/` | Logged in | Current user, role, manager and department |
 | `/api/departments/`, `/api/leave-types/` | Read: everyone. Write: HR | Reference data (deactivate, never delete) |
+| `/api/holidays/` | Read: everyone. Write: HR | Public holidays by `?year=` (default current year); HR can also delete them |
 | `/api/users/` | HR | Create users with an initial password, edit role, manager, department and status |
 | `/api/leave-balances/` | Own balances; HR sees all | Allocated, used, pending and available days; HR edits `allocated` |
 | `POST /api/leave-balances/allocate/` | HR | Create missing balances for a year (supports `dry_run`) |
@@ -118,7 +122,7 @@ return `404`. The full reference is in Swagger UI.
 
 ```
 accounts/   User (email login, role, manager, department), Department, auth and user endpoints
-leaves/     LeaveType, LeaveBalance, LeaveRequest, the leave service and its endpoints
+leaves/     LeaveType, LeaveBalance, LeaveRequest, PublicHoliday, the leave service and its endpoints
   services.py   Leave rules, approval routing and yearly allocation
   management/commands/allocate_leave_balances.py
 config/     Settings, URLs, pagination, shared viewset helpers, error handler
