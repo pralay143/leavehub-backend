@@ -87,12 +87,15 @@ Copy `.env.example` to `.env` and fill it in. `.env` is ignored by Git.
 
 ```powershell
 .\.venv\Scripts\python.exe manage.py migrate
+.\.venv\Scripts\python.exe manage.py createcachetable
 .\.venv\Scripts\python.exe manage.py createsuperuser
 .\.venv\Scripts\python.exe manage.py allocate_leave_balances --year 2026
 ```
 
-`createsuperuser` asks for an email, a username and a password; you log in
-with the email. The migrations create the default leave types.
+`createcachetable` creates the table behind the shared cache (used by the
+login rate limit). `createsuperuser` asks for an email, a username and a
+password; you log in with the email. The migrations create the default leave
+types.
 
 ### 5. Run
 
@@ -108,11 +111,12 @@ with the email. The migrations create the default leave types.
 
 ## API overview
 
-All endpoints except login and refresh need `Authorization: Bearer <access token>`.
+All endpoints except health, login and refresh need `Authorization: Bearer <access token>`.
 List endpoints return 20 results per page; pass `?page_size=` for up to 100.
 
 | Endpoint | Who | Purpose |
 |---|---|---|
+| `GET /api/health/` | Anyone | Health check: `{"status": "ok"}`, or 503 if the database is down |
 | `POST /api/auth/login/`, `refresh/`, `logout/` | Anyone | Get, rotate and revoke tokens |
 | `GET /api/auth/me/` | Logged in | Current user, role, manager and department |
 | `/api/departments/`, `/api/leave-types/` | Read: everyone. Write: HR | Reference data (deactivate, never delete) |
@@ -148,6 +152,11 @@ config/     Settings, URLs, pagination, shared viewset helpers, error handler
 
 After changing the API, regenerate the frontend client with
 `npm run api:generate` in the frontend repository while this server is running.
+
+## Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for production settings, the Docker image,
+release steps and a checklist.
 
 ## Security notes
 

@@ -58,6 +58,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     "corsheaders.middleware.CorsMiddleware",
     'django.middleware.common.CommonMiddleware',
@@ -133,6 +134,30 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    # Hashed, compressed files in production (requires collectstatic);
+    # plain files while developing.
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+        if DEBUG
+        else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+    },
+}
+
+
+# Cache
+# Shared by all server processes, e.g. for the login rate limit.
+# Create the table once with `manage.py createcachetable`.
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "django_cache",
+    }
+}
 
 
 # Email
@@ -221,4 +246,40 @@ SIMPLE_JWT = {
     "UPDATE_LAST_LOGIN": True,
     "CHECK_REVOKE_TOKEN": True,
     "TOKEN_OBTAIN_SERIALIZER": "accounts.serializers.LoginSerializer",
+}
+
+
+# Production security
+# Applied when DEBUG is off. See DEPLOYMENT.md.
+
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+if not DEBUG:
+    # Trust X-Forwarded-Proto only when a proxy that sets it is in front.
+    if env.bool("BEHIND_HTTPS_PROXY", default=False):
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+    # Let the health check answer over plain HTTP for internal probes.
+    SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=3600)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
+    SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=False)
+    X_FRAME_OPTIONS = "DENY"
+
+# HSTS for subdomains and browser preload lists affect the whole domain, so they
+# are opt-in (see DEPLOYMENT.md) and their deploy-check warnings are silenced.
+SILENCED_SYSTEM_CHECKS = ["security.W005", "security.W021"]
+
+
+# Logging
+# Everything at INFO and above goes to the console, which hosting platforms collect.
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"simple": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "simple"}},
+    "root": {"handlers": ["console"], "level": env.str("LOG_LEVEL", default="INFO")},
 }

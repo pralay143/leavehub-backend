@@ -1,0 +1,19 @@
+# Never send local secrets, environments or build output to the Docker build.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+staticfiles/
+media/
+*.sqlite3
+*.log
+.git/
+.gitignore
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.idea/
