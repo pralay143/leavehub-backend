@@ -14,7 +14,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 
-from .models import LeaveBalance, LeaveRequest, LeaveType
+from .models import LeaveBalance, LeaveRequest, LeaveType, PublicHoliday
 
 HALF_DAY = Decimal("0.5")
 ACTIVE_STATUSES = (LeaveRequest.Status.PENDING, LeaveRequest.Status.APPROVED)
@@ -31,14 +31,27 @@ class LeaveRequestError(Exception):
 # --- Calculations -----------------------------------------------------------
 
 
+def holidays_between(start_date, end_date):
+    """Dates of public holidays from start_date to end_date inclusive."""
+    return set(
+        PublicHoliday.objects.filter(date__range=(start_date, end_date)).values_list("date", flat=True)
+    )
+
+
 def count_leave_days(start_date, end_date, half_day=False):
-    """Working days (Monday to Friday) from start_date to end_date inclusive."""
+    """Working days from start_date to end_date inclusive: Monday to Friday,
+    excluding public holidays."""
+    holidays = holidays_between(start_date, end_date)
+
+    def is_working_day(day):
+        return day.weekday() < 5 and day not in holidays
+
     if half_day:
-        return HALF_DAY if start_date.weekday() < 5 else Decimal("0")
+        return HALF_DAY if is_working_day(start_date) else Decimal("0")
     days = 0
     current = start_date
     while current <= end_date:
-        if current.weekday() < 5:
+        if is_working_day(current):
             days += 1
         current += timedelta(days=1)
     return Decimal(days)

@@ -192,3 +192,16 @@ class LeaveRequest(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.leave_type} {self.start_date}..{self.end_date} ({self.status})"
+
+
+class PublicHoliday(models.Model):
+    """A company-wide public holiday. Holidays are not counted as leave days."""
+
+    date = models.DateField(unique=True)
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["date"]
+
+    def __str__(self):
+        return f"{self.name} ({self.date})"

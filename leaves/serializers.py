@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from accounts.serializers import UserSummarySerializer
 
-from .models import LeaveBalance, LeaveRequest, LeaveType
+from .models import LeaveBalance, LeaveRequest, LeaveType, PublicHoliday
 from .services import can_review, pending_days
 
 DAYS_FIELD = serializers.DecimalField(max_digits=6, decimal_places=1)
@@ -165,3 +165,9 @@ class ReviewSerializer(serializers.Serializer):
         max_length=2000,
         help_text="Optional when approving; required when rejecting.",
     )
+
+
+class PublicHolidaySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PublicHoliday
+        fields = ["id", "date", "name"]

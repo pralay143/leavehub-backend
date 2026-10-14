@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from accounts.permissions import IsHR, IsHROrReadOnly, is_hr
 from config.viewsets import CreateListRetrieveUpdateViewSet, int_query_param
 
-from .models import LeaveBalance, LeaveRequest, LeaveType
+from .models import LeaveBalance, LeaveRequest, LeaveType, PublicHoliday
 from .serializers import (
     AllocateBalancesSerializer,
     AllocationResultSerializer,
@@ -22,6 +22,7 @@ from .serializers import (
     LeaveRequestCreateSerializer,
     LeaveRequestSerializer,
     LeaveTypeSerializer,
+    PublicHolidaySerializer,
     ReviewSerializer,
 )
 from .services import (
@@ -254,3 +255,35 @@ class LeaveRequestViewSet(
     def cancel(self, request, pk=None):
         leave_request = cancel_leave_request(leave_request=self.get_object(), user=request.user)
         return self._respond(leave_request)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[OpenApiParameter("year", OpenApiTypes.INT, description="Defaults to the current year.")]
+    )
+)
+class PublicHolidayViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Company-wide public holidays, which are not counted as leave days.
+
+    Everyone can read them; HR can create, update and delete them. Changing
+    holidays does not recalculate requests that were already submitted.
+    """
+
+    serializer_class = PublicHolidaySerializer
+    permission_classes = [IsHROrReadOnly]
+    pagination_class = None
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        holidays = PublicHoliday.objects.all()
+        if self.action == "list":
+            year = int_query_param(self.request, "year") or timezone.localdate().year
+            holidays = holidays.filter(date__year=year)
+        return holidays

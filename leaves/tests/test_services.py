@@ -5,7 +5,7 @@ from unittest import mock
 from django.test import TestCase
 
 from accounts.models import User
-from leaves.models import LeaveBalance, LeaveRequest, LeaveType
+from leaves.models import LeaveBalance, LeaveRequest, LeaveType, PublicHoliday
 from leaves.services import (
     LeaveRequestError,
     approve_leave_request,
@@ -114,6 +114,28 @@ class DayCountTests(LeaveServiceTestCase):
     def test_inactive_leave_type_is_rejected(self):
         LeaveType.objects.filter(pk=self.earned.pk).update(is_active=False)
         self.assertRuleError("not available", self.request)
+
+    def test_public_holidays_are_not_counted(self):
+        PublicHoliday.objects.create(date=WED, name="Test holiday")
+        self.assertEqual(count_leave_days(MON, FRI), Decimal("4"))
+        leave = self.request(MON, FRI)
+        self.assertEqual(leave.days, Decimal("4"))
+        approve_leave_request(leave_request=leave, reviewer=self.manager)
+        self.assertEqual(self.balance().used, Decimal("4"))
+
+    def test_range_of_only_holidays_and_weekend_is_rejected(self):
+        PublicHoliday.objects.create(date=FRI, name="Test holiday")
+        self.assertRuleError("no working days", self.request, FRI, SUN)
+
+    def test_half_day_on_holiday_is_rejected(self):
+        PublicHoliday.objects.create(date=WED, name="Test holiday")
+        self.assertRuleError("no working days", self.request, WED, half_day=True)
+
+    def test_existing_request_keeps_its_days_when_a_holiday_is_added(self):
+        leave = self.request(MON, FRI)
+        PublicHoliday.objects.create(date=WED, name="Late holiday")
+        leave.refresh_from_db()
+        self.assertEqual(leave.days, Decimal("5"))
 
 
 class OverlapTests(LeaveServiceTestCase):

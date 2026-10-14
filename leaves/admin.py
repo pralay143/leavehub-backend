@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LeaveBalance, LeaveRequest, LeaveType
+from .models import LeaveBalance, LeaveRequest, LeaveType, PublicHoliday
 
 
 @admin.register(LeaveType)
@@ -53,3 +53,10 @@ class LeaveRequestAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(PublicHoliday)
+class PublicHolidayAdmin(admin.ModelAdmin):
+    list_display = ("date", "name")
+    date_hierarchy = "date"
+    search_fields = ("name",)
